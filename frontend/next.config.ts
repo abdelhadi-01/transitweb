@@ -1,7 +1,13 @@
 const nextConfig = {
     reactStrictMode: false,
-    swcMinify: true,
-    // ... autres configs
+    async rewrites() {
+        return [
+            {
+                source: '/api/:path*',
+                destination: 'http://localhost:8080/api/:path*',
+            },
+        ];
+    },
 }
 
 module.exports = nextConfig

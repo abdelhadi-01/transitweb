@@ -1,18 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/navigation';
+import { tripApi, adminApi } from '@/lib/api';
 import {
     User,
     Mail,
     Phone,
     MapPin,
-    Calendar,
     Edit2,
     Save,
     X,
-    UserCircle,
     Shield,
     Truck,
     Package,
@@ -21,14 +19,12 @@ import {
     CheckCircle,
     Clock,
     Award,
-    Star,
     TrendingUp
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// Chargement dynamique de la carte avec le bon chemin
 const SimpleMap = dynamic(() => import('../../components/SimpleMap'), {
     ssr: false,
     loading: () => (
@@ -38,9 +34,15 @@ const SimpleMap = dynamic(() => import('../../components/SimpleMap'), {
     )
 });
 
+const normalizeTrips = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.content)) return payload.content;
+    return [];
+};
+
 export default function ProfilePage() {
     const { user } = useAuth();
-    const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({
         nom: '',
@@ -56,38 +58,55 @@ export default function ProfilePage() {
         pendingTrips: 0,
         inProgressTrips: 0,
         totalDistance: 0,
-        averageRating: 0
+        completionRate: 0
     });
 
-    useEffect(() => {
-        if (user) {
-            setFormData({
-                nom: user.nom || '',
-                email: user.email || '',
-                telephone: user.telephone || '',
-                role: user.role || ''
-            });
-            loadUserStats();
-            getUserLocation();
-        }
-    }, [user]);
-
-    const loadUserStats = async () => {
+    const loadUserStats = useCallback(async () => {
         try {
+            let response;
+            if (user?.role === 'ADMIN') {
+                response = await adminApi.getTrips();
+            } else if (user?.role === 'CHAUFFEUR') {
+                response = await tripApi.getChauffeurTrips();
+            } else {
+                response = await tripApi.getClientTrips();
+            }
+
+            const trips = normalizeTrips(response?.data).sort(
+                (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+            );
+
+            const totalTrips = trips.length;
+            const completedTrips = trips.filter((trip) => trip.statut === 'COMPLETED').length;
+            const pendingTrips = trips.filter((trip) => trip.statut === 'PENDING').length;
+            const inProgressTrips = trips.filter(
+                (trip) => trip.statut === 'IN_PROGRESS' || trip.statut === 'ACCEPTED'
+            ).length;
+            const totalDistance = trips.reduce((sum, trip) => sum + (trip.distance || 0), 0);
+            const completionRate = totalTrips > 0 ? Math.round((completedTrips / totalTrips) * 100) : 0;
+
             setStats({
-                totalTrips: 12,
-                completedTrips: 8,
-                pendingTrips: 2,
-                inProgressTrips: 2,
-                totalDistance: 156.5,
-                averageRating: 4.7
+                totalTrips,
+                completedTrips,
+                pendingTrips,
+                inProgressTrips,
+                totalDistance,
+                completionRate
             });
         } catch (error) {
             console.error('Erreur stats:', error);
+            setStats({
+                totalTrips: 0,
+                completedTrips: 0,
+                pendingTrips: 0,
+                inProgressTrips: 0,
+                totalDistance: 0,
+                completionRate: 0
+            });
         }
-    };
+    }, [user]);
 
-    const getUserLocation = () => {
+    const getUserLocation = useCallback(() => {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -112,30 +131,48 @@ export default function ProfilePage() {
                 address: 'Casablanca, Maroc'
             });
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        if (!user) return;
+
+        const timer = setTimeout(() => {
+            void loadUserStats();
+            getUserLocation();
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [user, loadUserStats, getUserLocation]);
+
+    const displayProfile = isEditing
+        ? formData
+        : {
+            nom: user?.nom || '',
+            email: user?.email || '',
+            telephone: user?.telephone || '',
+            role: user?.role || ''
+        };
 
     const handleSave = async () => {
         setLoading(true);
         try {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            toast.success('✅ Profil mis à jour avec succès !');
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            toast.success('Profil mis a jour avec succes !');
             setIsEditing(false);
-        } catch (error) {
-            toast.error('Erreur lors de la mise à jour');
+        } catch {
+            toast.error('Erreur lors de la mise a jour');
         } finally {
             setLoading(false);
         }
     };
 
     const handleCancel = () => {
-        if (user) {
-            setFormData({
-                nom: user.nom || '',
-                email: user.email || '',
-                telephone: user.telephone || '',
-                role: user.role || ''
-            });
-        }
+        setFormData({
+            nom: user?.nom || '',
+            email: user?.email || '',
+            telephone: user?.telephone || '',
+            role: user?.role || ''
+        });
         setIsEditing(false);
     };
 
@@ -166,11 +203,6 @@ export default function ProfilePage() {
         return colors[role] || 'bg-gray-100 text-gray-700';
     };
 
-    const getInitials = (name) => {
-        if (!name) return '?';
-        return name.charAt(0).toUpperCase();
-    };
-
     const statCards = [
         {
             icon: Package,
@@ -195,7 +227,7 @@ export default function ProfilePage() {
         },
         {
             icon: CheckCircle,
-            label: 'Terminés',
+            label: 'Termines',
             value: stats.completedTrips,
             bgColor: 'bg-green-50',
             textColor: 'text-green-600'
@@ -203,17 +235,17 @@ export default function ProfilePage() {
         {
             icon: TrendingUp,
             label: 'Distance totale',
-            value: `${stats.totalDistance} km`,
+            value: `${stats.totalDistance.toFixed(1)} km`,
             bgColor: 'bg-indigo-50',
             textColor: 'text-indigo-600'
         },
         {
-            icon: Star,
-            label: 'Note moyenne',
-            value: `${stats.averageRating} ★`,
+            icon: Award,
+            label: 'Taux de completion',
+            value: `${stats.completionRate}%`,
             bgColor: 'bg-amber-50',
             textColor: 'text-amber-600'
-        },
+        }
     ];
 
     return (
@@ -235,22 +267,22 @@ export default function ProfilePage() {
                                     <div className="relative">
                                         <div className="w-24 h-24 bg-white/20 backdrop-blur rounded-full flex items-center justify-center border-4 border-white/50">
                                             <span className="text-4xl font-bold text-white">
-                                                {getInitials(formData.nom)}
+                                                {(displayProfile.nom || '?').charAt(0).toUpperCase()}
                                             </span>
                                         </div>
                                         <button
                                             className="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-lg hover:bg-gray-50 transition"
-                                            onClick={() => toast.success('📸 Fonctionnalité à venir')}
+                                            onClick={() => toast.success('Fonctionnalite a venir')}
                                         >
                                             <Camera className="w-4 h-4 text-gray-600" />
                                         </button>
                                     </div>
                                     <div className="flex-1 text-center md:text-left">
-                                        <h1 className="text-2xl font-bold text-white">{formData.nom}</h1>
+                                        <h1 className="text-2xl font-bold text-white">{displayProfile.nom}</h1>
                                         <div className="flex items-center justify-center md:justify-start gap-2 mt-1">
-                                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${getRoleColor(formData.role)}`}>
-                                                {getRoleIcon(formData.role)}
-                                                {getRoleLabel(formData.role)}
+                                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${getRoleColor(displayProfile.role)}`}>
+                                                {getRoleIcon(displayProfile.role)}
+                                                {getRoleLabel(displayProfile.role)}
                                             </span>
                                         </div>
                                         <p className="text-white/80 text-sm mt-2">
@@ -260,7 +292,15 @@ export default function ProfilePage() {
                                     <div className="flex gap-2">
                                         {!isEditing ? (
                                             <button
-                                                onClick={() => setIsEditing(true)}
+                                                onClick={() => {
+                                                    setFormData({
+                                                        nom: user?.nom || '',
+                                                        email: user?.email || '',
+                                                        telephone: user?.telephone || '',
+                                                        role: user?.role || ''
+                                                    });
+                                                    setIsEditing(true);
+                                                }}
                                                 className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center gap-2 transition"
                                             >
                                                 <Edit2 className="w-4 h-4" />
@@ -311,7 +351,7 @@ export default function ProfilePage() {
                                                         className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                                     />
                                                 ) : (
-                                                    <p className="font-medium text-gray-900">{formData.nom}</p>
+                                                    <p className="font-medium text-gray-900">{displayProfile.nom}</p>
                                                 )}
                                             </div>
                                         </div>
@@ -329,7 +369,7 @@ export default function ProfilePage() {
                                                         className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                                     />
                                                 ) : (
-                                                    <p className="font-medium text-gray-900">{formData.email}</p>
+                                                    <p className="font-medium text-gray-900">{displayProfile.email}</p>
                                                 )}
                                             </div>
                                         </div>
@@ -338,17 +378,17 @@ export default function ProfilePage() {
                                         <div className="flex items-center gap-3">
                                             <Phone className="w-5 h-5 text-gray-400" />
                                             <div className="flex-1">
-                                                <p className="text-xs text-gray-500">Téléphone</p>
+                                                <p className="text-xs text-gray-500">Telephone</p>
                                                 {isEditing ? (
                                                     <input
                                                         type="tel"
                                                         value={formData.telephone || ''}
                                                         onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
                                                         className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                        placeholder="Non renseigné"
+                                                        placeholder="Non renseigne"
                                                     />
                                                 ) : (
-                                                    <p className="font-medium text-gray-900">{formData.telephone || 'Non renseigné'}</p>
+                                                    <p className="font-medium text-gray-900">{displayProfile.telephone || 'Non renseigne'}</p>
                                                 )}
                                             </div>
                                         </div>
@@ -357,8 +397,8 @@ export default function ProfilePage() {
                                         <div className="flex items-center gap-3">
                                             <MapPin className="w-5 h-5 text-gray-400" />
                                             <div className="flex-1">
-                                                <p className="text-xs text-gray-500">Rôle</p>
-                                                <p className="font-medium text-gray-900">{getRoleLabel(formData.role)}</p>
+                                                <p className="text-xs text-gray-500">Role</p>
+                                                <p className="font-medium text-gray-900">{getRoleLabel(displayProfile.role)}</p>
                                             </div>
                                         </div>
                                     </div>

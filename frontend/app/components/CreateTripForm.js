@@ -4,7 +4,6 @@ import { useState } from 'react';
 import {
     X,
     MapPin,
-    RefreshCw,
     CheckCircle,
     Ruler,
     DollarSign,
@@ -26,62 +25,62 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
     const [selectionMode, setSelectionMode] = useState('start');
     const [step, setStep] = useState(1);
 
-    // Calcul de distance (formule Haversine)
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
         if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
         const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat1 * Math.PI) / 180) *
+                Math.cos((lat2 * Math.PI) / 180) *
+                Math.sin(dLon / 2) *
+                Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     };
 
-    // Calcul du prix estimé
     const calculatePrice = (distance, poids = 0) => {
-        const prixBase = 5;
-        const prixParKm = 0.5;
-        const prixParKg = 0.2;
-        return prixBase + (distance * prixParKm) + (poids * prixParKg);
+        const prixBase = 20;
+        const prixParKm = 5;
+        const prixParKg = 2;
+        return prixBase + distance * prixParKm + poids * prixParKg;
     };
 
-    // Obtenir les infos de distance et prix
-    const getDistanceInfo = () => {
+    const distanceInfo = (() => {
         if (!startLocation || !endLocation) return null;
         const distance = calculateDistance(
-            startLocation.lat, startLocation.lng,
-            endLocation.lat, endLocation.lng
+            startLocation.lat,
+            startLocation.lng,
+            endLocation.lat,
+            endLocation.lng
         );
         const poids = parseFloat(formData.poids) || 0;
         return {
-            distance: distance,
+            distance,
             prix: calculatePrice(distance, poids),
-            poids: poids
+            poids
         };
-    };
-
-    const distanceInfo = getDistanceInfo();
+    })();
 
     const handleStartSelect = (location) => {
         setStartLocation(location);
-        toast.success('📍 Point de départ sélectionné');
+        toast.success('Point de depart selectionne');
         setSelectionMode('end');
     };
 
     const handleEndSelect = (location) => {
         setEndLocation(location);
-        toast.success('📍 Point d\'arrivée sélectionné');
+        toast.success('Point darrivee selectionne');
     };
 
     const handleNext = () => {
         if (!startLocation) {
-            toast.error('Veuillez sélectionner le point de départ');
+            toast.error('Veuillez selectionner le point de depart');
             return;
         }
         if (!endLocation) {
-            toast.error('Veuillez sélectionner le point d\'arrivée');
+            toast.error('Veuillez selectionner le point darrivee');
             return;
         }
         setStep(2);
@@ -100,7 +99,7 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
         }
 
         if (!startLocation || !endLocation) {
-            toast.error('Veuillez sélectionner les points de départ et d\'arrivée');
+            toast.error('Veuillez selectionner les points de depart et darrivee');
             return;
         }
 
@@ -117,11 +116,9 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
             prix: distanceInfo?.prix || 0
         };
 
-        console.log('📤 Données envoyées:', tripData);
         onSubmit(tripData);
     };
 
-    // Étape 1 : Sélection sur la carte
     if (step === 1) {
         return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4">
@@ -130,12 +127,14 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                         <div className="flex justify-between items-center p-4 md:p-6">
                             <div>
                                 <h2 className="text-xl md:text-2xl font-bold text-gray-900">
-                                    {selectionMode === 'start' ? '📍 Sélectionnez le départ' : '🏁 Sélectionnez l\'arrivée'}
+                                    {selectionMode === 'start'
+                                        ? 'Selection du depart'
+                                        : 'Selection de larrivee'}
                                 </h2>
                                 <p className="text-sm text-gray-500 mt-1">
                                     {selectionMode === 'start'
-                                        ? 'Choisissez où vous souhaitez être pris en charge'
-                                        : 'Choisissez où vous souhaitez être déposé'}
+                                        ? 'Choisissez le lieu de prise en charge'
+                                        : 'Choisissez le lieu de depot'}
                                 </p>
                             </div>
                             <button
@@ -159,9 +158,7 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                 }`}>
                                     {startLocation ? '✓' : '1'}
                                 </div>
-                                <div className={`flex-1 h-1 rounded-full ${
-                                    startLocation ? 'bg-green-500' : 'bg-gray-200'
-                                }`}></div>
+                                <div className={`flex-1 h-1 rounded-full ${startLocation ? 'bg-green-500' : 'bg-gray-200'}`}></div>
                             </div>
                             <div className="flex-1 flex items-center gap-3">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
@@ -198,7 +195,7 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                             <MapPin className="w-4 h-4 text-white" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-green-700">DÉPART</p>
+                                            <p className="text-xs font-medium text-green-700">DEPART</p>
                                             <p className="text-sm text-gray-700 truncate">
                                                 {startLocation.address?.split(',')[0] || startLocation.address}
                                             </p>
@@ -222,7 +219,7 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                             <MapPin className="w-4 h-4 text-white" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-red-700">ARRIVÉE</p>
+                                            <p className="text-xs font-medium text-red-700">ARRIVEE</p>
                                             <p className="text-sm text-gray-700 truncate">
                                                 {endLocation.address?.split(',')[0] || endLocation.address}
                                             </p>
@@ -247,7 +244,7 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                     <div className="text-center">
                                         <div className="flex items-center justify-center gap-1 text-xs text-gray-500">
                                             <Ruler className="w-4 h-4" />
-                                            Distance estimée
+                                            Distance estimee
                                         </div>
                                         <div className="text-xl font-bold text-blue-600 mt-1">
                                             {distanceInfo.distance.toFixed(1)} km
@@ -265,10 +262,10 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                     <div className="text-center">
                                         <div className="flex items-center justify-center gap-1 text-xs text-gray-500">
                                             <DollarSign className="w-4 h-4" />
-                                            Prix estimé
+                                            Prix estime
                                         </div>
                                         <div className="text-xl font-bold text-green-600 mt-1">
-                                            {distanceInfo.prix.toFixed(2)} €
+                                            {distanceInfo.prix.toFixed(2)} MAD
                                         </div>
                                     </div>
                                 </div>
@@ -299,15 +296,14 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
         );
     }
 
-    // Étape 2 : Détails du colis
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[95vh] overflow-y-auto">
                 <div className="sticky top-0 bg-white z-10 rounded-t-2xl border-b border-gray-100">
                     <div className="flex justify-between items-center p-4 md:p-6">
                         <div>
-                            <h2 className="text-xl font-bold text-gray-900">Détails du colis</h2>
-                            <p className="text-sm text-gray-500">Complétez les informations</p>
+                            <h2 className="text-xl font-bold text-gray-900">Details du colis</h2>
+                            <p className="text-sm text-gray-500">Completez les informations</p>
                         </div>
                         <button
                             onClick={onCancel}
@@ -325,9 +321,9 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                 <MapPin className="w-3 h-3 text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-green-600">DÉPART</p>
+                                <p className="text-xs font-medium text-green-600">DEPART</p>
                                 <p className="text-sm text-gray-700 truncate">
-                                    {startLocation?.address?.split(',')[0] || 'Non sélectionné'}
+                                    {startLocation?.address?.split(',')[0] || 'Non selectionne'}
                                 </p>
                             </div>
                         </div>
@@ -336,9 +332,9 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                 <MapPin className="w-3 h-3 text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-red-600">ARRIVÉE</p>
+                                <p className="text-xs font-medium text-red-600">ARRIVEE</p>
                                 <p className="text-sm text-gray-700 truncate">
-                                    {endLocation?.address?.split(',')[0] || 'Non sélectionné'}
+                                    {endLocation?.address?.split(',')[0] || 'Non selectionne'}
                                 </p>
                             </div>
                         </div>
@@ -350,8 +346,8 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                                     <p className="font-bold text-blue-600">{distanceInfo.distance.toFixed(1)} km</p>
                                 </div>
                                 <div className="text-center bg-green-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-500">Prix estimé</p>
-                                    <p className="font-bold text-green-600">{distanceInfo.prix.toFixed(2)} €</p>
+                                    <p className="text-xs text-gray-500">Prix estime</p>
+                                    <p className="font-bold text-green-600">{distanceInfo.prix.toFixed(2)} MAD</p>
                                 </div>
                             </div>
                         )}
@@ -366,7 +362,6 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                         </button>
                     </div>
 
-                    {/* Description - Texte en noir */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
                             Description du colis
@@ -377,11 +372,10 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
                             rows="3"
-                            placeholder="Ex: Canapé 3 places, fragile, dimensions 200x80x90..."
+                            placeholder="Ex: Canape 3 places, fragile, dimensions 200x80x90..."
                         />
                     </div>
 
-                    {/* Poids - Texte en noir */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
                             Poids (kg) *
@@ -420,7 +414,7 @@ export default function CreateTripForm({ onSubmit, onCancel }) {
                             className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-105"
                         >
                             <Truck className="w-4 h-4" />
-                            Créer la demande
+                            Creer la demande
                         </button>
                     </div>
                 </form>

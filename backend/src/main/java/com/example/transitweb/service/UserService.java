@@ -3,11 +3,13 @@ package com.example.transitweb.service;
 import com.example.transitweb.dto.AuthResponse;
 import com.example.transitweb.dto.LoginRequest;
 import com.example.transitweb.dto.RegisterRequest;
-import com.example.transitweb.model.User;
 import com.example.transitweb.model.Role;
+import com.example.transitweb.model.User;
 import com.example.transitweb.repository.UserRepository;
 import com.example.transitweb.security.JwtService;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class UserService {
@@ -20,68 +22,66 @@ public class UserService {
         this.jwtService = jwtService;
     }
 
-    public AuthResponse register(RegisterRequest request) {
-        System.out.println("📝 Inscription: " + request.getEmail());
+    private String extractRawToken(String token) {
+        if (token == null || !token.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authorization invalide");
+        }
+        return token.substring(7).trim();
+    }
 
+    public AuthResponse register(RegisterRequest request) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Email déjà utilisé");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email deja utilise");
         }
 
         User user = new User();
         user.setNom(request.getNom());
         user.setEmail(request.getEmail());
-        user.setPassword(request.getPassword()); // Mot de passe en clair
+        user.setPassword(request.getPassword());
         user.setTelephone(request.getTelephone());
-
-        if (request.getRole() != null && request.getRole().equals("CHAUFFEUR")) {
-            user.setRole(Role.CHAUFFEUR);
-        } else {
-            user.setRole(Role.CLIENT);
-        }
+        user.setRole("CHAUFFEUR".equals(request.getRole()) ? Role.CHAUFFEUR : Role.CLIENT);
 
         userRepository.save(user);
-        System.out.println("✅ Utilisateur créé: " + user.getEmail());
-
-        String token = jwtService.generateToken(user.getEmail());
-
-        AuthResponse response = new AuthResponse();
-        response.setToken(token);
-        AuthResponse.UserDTO userDTO = new AuthResponse.UserDTO();
-        userDTO.setId(user.getId());
-        userDTO.setNom(user.getNom());
-        userDTO.setEmail(user.getEmail());
-        userDTO.setTelephone(user.getTelephone());
-        userDTO.setRole(user.getRole().toString());
-        response.setUser(userDTO);
-
-        return response;
+        return buildAuthResponse(user);
     }
 
     public AuthResponse login(LoginRequest request) {
-        System.out.println("🔐 Tentative de connexion: " + request.getEmail());
-
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> {
-                    System.out.println("❌ Utilisateur non trouvé: " + request.getEmail());
-                    return new RuntimeException("Utilisateur non trouvé");
-                });
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non trouve"));
 
-        System.out.println("✅ Utilisateur trouvé: " + user.getEmail());
-        System.out.println("🔑 Mot de passe stocké: " + user.getPassword());
-        System.out.println("🔑 Mot de passe fourni: " + request.getPassword());
-
-        // Comparaison en clair
         if (!user.getPassword().equals(request.getPassword())) {
-            System.out.println("❌ Mot de passe incorrect");
-            throw new RuntimeException("Mot de passe incorrect");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Mot de passe incorrect");
         }
 
-        System.out.println("✅ Connexion réussie pour: " + user.getEmail());
+        return buildAuthResponse(user);
+    }
 
+    public AuthResponse.UserDTO getCurrentUser(String token) {
+        String rawToken = extractRawToken(token);
+        String email;
+        try {
+            email = jwtService.extractEmail(rawToken);
+        } catch (RuntimeException ex) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token invalide ou expire", ex);
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non trouve"));
+
+        AuthResponse.UserDTO userDTO = new AuthResponse.UserDTO();
+        userDTO.setId(user.getId());
+        userDTO.setNom(user.getNom());
+        userDTO.setEmail(user.getEmail());
+        userDTO.setTelephone(user.getTelephone());
+        userDTO.setRole(user.getRole().toString());
+        return userDTO;
+    }
+
+    private AuthResponse buildAuthResponse(User user) {
         String token = jwtService.generateToken(user.getEmail());
-
         AuthResponse response = new AuthResponse();
         response.setToken(token);
+
         AuthResponse.UserDTO userDTO = new AuthResponse.UserDTO();
         userDTO.setId(user.getId());
         userDTO.setNom(user.getNom());
@@ -89,13 +89,6 @@ public class UserService {
         userDTO.setTelephone(user.getTelephone());
         userDTO.setRole(user.getRole().toString());
         response.setUser(userDTO);
-
         return response;
-    }
-
-    public User getCurrentUser(String token) {
-        String email = jwtService.extractEmail(token.substring(7));
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
     }
 }

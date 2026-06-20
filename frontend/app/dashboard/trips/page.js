@@ -19,11 +19,14 @@ import {
     MapPin,
     X,
     Sparkles,
-    ArrowUpDown
 } from 'lucide-react';
 import Link from 'next/link';
 import TripCard from '../../components/TripCard';
 import TripDetailModal from '../../components/TripDetailModal';
+import { formatCurrency } from '@/lib/currency';
+
+const sortByCreatedAtDesc = (items) =>
+    [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
 export default function TripsPage() {
     const { user } = useAuth();
@@ -34,7 +37,6 @@ export default function TripsPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTrip, setSelectedTrip] = useState(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
-    const [sortOrder, setSortOrder] = useState('desc');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
     const [showResults, setShowResults] = useState(false);
@@ -67,7 +69,7 @@ export default function TripsPage() {
                 trip.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 trip.clientNom?.toLowerCase().includes(searchTerm.toLowerCase())
             );
-            setSearchResults(results);
+            setSearchResults(sortByCreatedAtDesc(results));
             setShowResults(true);
         } else {
             setSearchResults([]);
@@ -78,7 +80,7 @@ export default function TripsPage() {
     const loadTrips = async () => {
         try {
             const response = await tripApi.getClientTrips();
-            setTrips(response.data);
+            setTrips(sortByCreatedAtDesc(response.data || []));
         } catch (error) {
             toast.error('Erreur lors du chargement des trajets');
         } finally {
@@ -138,7 +140,7 @@ export default function TripsPage() {
         return filtered;
     };
 
-    const filteredTrips = getFilteredTrips();
+    const filteredTrips = sortByCreatedAtDesc(getFilteredTrips());
 
     // Compteurs par statut
     const statusCounts = {
@@ -311,7 +313,7 @@ export default function TripsPage() {
                                                 </div>
                                             </div>
                                             <span className="text-sm font-semibold text-green-600 ml-4 whitespace-nowrap">
-                                                {trip.prix?.toFixed(2)} €
+                                                {formatCurrency(trip.prix)}
                                             </span>
                                         </div>
                                     ))}
@@ -451,7 +453,7 @@ export default function TripsPage() {
                                             <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-400">
                                                 <span>📦 {trip.poids} kg</span>
                                                 {trip.distance && <span>📏 {trip.distance.toFixed(1)} km</span>}
-                                                <span>💰 {trip.prix?.toFixed(2)} €</span>
+                                                <span>💰 {formatCurrency(trip.prix)}</span>
                                                 <span>📅 {new Date(trip.createdAt).toLocaleDateString('fr-FR')}</span>
                                             </div>
                                         </div>

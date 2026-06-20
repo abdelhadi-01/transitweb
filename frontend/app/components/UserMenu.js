@@ -43,6 +43,12 @@ export default function UserMenu() {
         return roles[role] || role;
     };
 
+    const getTripsHref = () => {
+        if (user?.role === 'CHAUFFEUR') return '/dashboard/my-trips';
+        if (user?.role === 'ADMIN') return '/dashboard/all-trips';
+        return '/dashboard/trips';
+    };
+
     return (
         <div className="relative" ref={menuRef}>
             <button
@@ -89,7 +95,7 @@ export default function UserMenu() {
                             <span className="text-sm">Mon profil</span>
                         </Link>
                         <Link
-                            href="/dashboard/trips"
+                            href={getTripsHref()}
                             onClick={() => setIsOpen(false)}
                             className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
                         >

@@ -53,9 +53,39 @@ export default function MapView({ startLocation, endLocation }) {
         return { lat: 48.8566, lng: 2.3522 }; // Paris par défaut
     };
 
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    };
+
     const getZoom = () => {
-        if (startLocation?.lat && endLocation?.lat) return 10;
-        if (startLocation?.lat || endLocation?.lat) return 13;
+        if (startLocation?.lat && endLocation?.lat) {
+            const distance = calculateDistance(
+                startLocation.lat,
+                startLocation.lng,
+                endLocation.lat,
+                endLocation.lng
+            );
+
+            if (distance > 1000) return 4;
+            if (distance > 500) return 5;
+            if (distance > 200) return 6;
+            if (distance > 100) return 7;
+            if (distance > 50) return 8;
+            if (distance > 20) return 9;
+            return 11;
+        }
+
+        if (startLocation?.lat || endLocation?.lat) {
+            return 13;
+        }
+
         return 6;
     };
 

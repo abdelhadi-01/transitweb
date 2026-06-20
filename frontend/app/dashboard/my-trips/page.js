@@ -29,13 +29,16 @@ import {
     Phone,
     MessageCircle,
     Star,
-    ArrowUpDown,
     Sparkles,
     X
 } from 'lucide-react';
 import Link from 'next/link';
 import TripDetailModal from '../../components/TripDetailModal';
 import StatCard from '../../components/StatCard';
+import { formatCurrency } from '@/lib/currency';
+
+const sortByCreatedAtDesc = (items) =>
+    [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
 export default function MyTripsPage() {
     const { user } = useAuth();
@@ -49,7 +52,6 @@ export default function MyTripsPage() {
     const [lastUpdate, setLastUpdate] = useState(null);
     const [updatingStatus, setUpdatingStatus] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
-    const [sortOrder, setSortOrder] = useState('desc');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
     const [showResults, setShowResults] = useState(false);
@@ -63,30 +65,22 @@ export default function MyTripsPage() {
         earnings: 0
     });
 
-    // Fonction de tri des trajets
-    const sortTrips = (data, order) => {
-        return [...data].sort((a, b) => {
-            const dateA = new Date(a.createdAt).getTime();
-            const dateB = new Date(b.createdAt).getTime();
-            return order === 'desc' ? dateB - dateA : dateA - dateB;
-        });
-    };
-
     // Charger les trajets
     const loadTrips = async (showToast = false) => {
         try {
             setIsRefreshing(true);
             const response = await tripApi.getChauffeurTrips();
 
-            const sortedData = sortTrips(response.data, sortOrder);
+            const sortedData = sortByCreatedAtDesc(response.data || []);
             setTrips(sortedData);
             setLastUpdate(new Date());
 
-            const total = response.data.length;
-            const completed = response.data.filter(t => t.statut === 'COMPLETED').length;
-            const inProgress = response.data.filter(t => t.statut === 'IN_PROGRESS' || t.statut === 'ACCEPTED').length;
-            const pending = response.data.filter(t => t.statut === 'PENDING').length;
-            const earnings = response.data.filter(t => t.statut === 'COMPLETED').reduce((sum, t) => sum + (t.prix || 0), 0);
+            const source = response.data || [];
+            const total = source.length;
+            const completed = source.filter(t => t.statut === 'COMPLETED').length;
+            const inProgress = source.filter(t => t.statut === 'IN_PROGRESS' || t.statut === 'ACCEPTED').length;
+            const pending = source.filter(t => t.statut === 'PENDING').length;
+            const earnings = source.filter(t => t.statut === 'COMPLETED').reduce((sum, t) => sum + (t.prix || 0), 0);
             setStats({ total, completed, inProgress, pending, earnings });
 
             if (showToast) {
@@ -121,14 +115,6 @@ export default function MyTripsPage() {
         };
     }, []);
 
-    // Re-trier quand l'ordre change
-    useEffect(() => {
-        if (trips.length > 0) {
-            const sortedData = sortTrips(trips, sortOrder);
-            setTrips(sortedData);
-        }
-    }, [sortOrder]);
-
     // Mettre à jour les résultats de recherche en temps réel
     useEffect(() => {
         if (searchTerm.trim()) {
@@ -138,7 +124,7 @@ export default function MyTripsPage() {
                 trip.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 trip.clientNom?.toLowerCase().includes(searchTerm.toLowerCase())
             );
-            setSearchResults(results);
+            setSearchResults(sortByCreatedAtDesc(results));
             setShowResults(true);
         } else {
             setSearchResults([]);
@@ -175,6 +161,7 @@ export default function MyTripsPage() {
             }
 
             toast.success(successMessage);
+            window.dispatchEvent(new Event('notifications:refresh'));
             await loadTrips(false);
 
         } catch (error) {
@@ -195,10 +182,6 @@ export default function MyTripsPage() {
 
     const handleManualRefresh = () => {
         loadTrips(true);
-    };
-
-    const toggleSortOrder = () => {
-        setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
     };
 
     const clearSearch = () => {
@@ -247,7 +230,7 @@ export default function MyTripsPage() {
         return filtered;
     };
 
-    const filteredTrips = getFilteredTrips();
+    const filteredTrips = sortByCreatedAtDesc(getFilteredTrips());
 
     // Compteurs par statut
     const statusCounts = {
@@ -372,7 +355,7 @@ export default function MyTripsPage() {
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-sm text-white/80">Gains totaux</p>
-                        <p className="text-3xl font-bold">{stats.earnings.toFixed(2)} €</p>
+                        <p className="text-3xl font-bold">{formatCurrency(stats.earnings)}</p>
                         <p className="text-xs text-white/60 mt-1">💰 Revenus générés sur toutes vos missions</p>
                     </div>
                     <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
@@ -446,7 +429,7 @@ export default function MyTripsPage() {
                                             </div>
                                         </div>
                                         <span className="text-sm font-semibold text-green-600 ml-4 whitespace-nowrap">
-                                            {trip.prix?.toFixed(2)} €
+                                            {formatCurrency(trip.prix)}
                                         </span>
                                     </div>
                                 ))}
@@ -583,7 +566,7 @@ export default function MyTripsPage() {
                                             </span>
                                         </div>
                                         <span className="text-lg font-bold text-green-600">
-                                            {trip.prix?.toFixed(2)} €
+                                            {formatCurrency(trip.prix)}
                                         </span>
                                     </div>
 

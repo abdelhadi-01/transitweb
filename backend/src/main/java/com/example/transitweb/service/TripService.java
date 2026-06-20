@@ -2,15 +2,18 @@ package com.example.transitweb.service;
 
 import com.example.transitweb.dto.TripRequest;
 import com.example.transitweb.dto.TripResponse;
+import com.example.transitweb.model.Role;
 import com.example.transitweb.model.Trip;
 import com.example.transitweb.model.TripStatus;
 import com.example.transitweb.model.User;
-import com.example.transitweb.model.Role;
 import com.example.transitweb.repository.TripRepository;
 import com.example.transitweb.repository.UserRepository;
 import com.example.transitweb.security.JwtService;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -21,17 +24,38 @@ public class TripService {
     private final TripRepository tripRepository;
     private final UserRepository userRepository;
     private final JwtService jwtService;
+    private final NotificationService notificationService;
 
-    public TripService(TripRepository tripRepository, UserRepository userRepository, JwtService jwtService) {
+    public TripService(
+            TripRepository tripRepository,
+            UserRepository userRepository,
+            JwtService jwtService,
+            NotificationService notificationService
+    ) {
         this.tripRepository = tripRepository;
         this.userRepository = userRepository;
         this.jwtService = jwtService;
+        this.notificationService = notificationService;
+    }
+
+    private String extractRawToken(String token) {
+        if (token == null || !token.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authorization invalide");
+        }
+        return token.substring(7).trim();
     }
 
     private User extractUser(String token) {
-        String email = jwtService.extractEmail(token.substring(7));
+        String rawToken = extractRawToken(token);
+        String email;
+        try {
+            email = jwtService.extractEmail(rawToken);
+        } catch (RuntimeException ex) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token invalide ou expire", ex);
+        }
+
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non trouve"));
     }
 
     private TripResponse convertToResponse(Trip trip) {
@@ -41,19 +65,16 @@ public class TripService {
         response.setArrivee(trip.getArrivee());
         response.setDescription(trip.getDescription());
         response.setPoids(trip.getPoids());
-        response.setStatut(trip.getStatut().toString());
+        response.setStatut(trip.getStatut() != null ? trip.getStatut().toString() : null);
         response.setPrix(trip.getPrix());
-        response.setClientNom(trip.getClient().getNom());
+        response.setClientNom(trip.getClient() != null ? trip.getClient().getNom() : null);
         response.setChauffeurNom(trip.getChauffeur() != null ? trip.getChauffeur().getNom() : null);
         response.setCreatedAt(trip.getCreatedAt());
-
-        // Ajouter les coordonnées si elles existent
         response.setStartLat(trip.getStartLat());
         response.setStartLng(trip.getStartLng());
         response.setEndLat(trip.getEndLat());
         response.setEndLng(trip.getEndLng());
         response.setDistance(trip.getDistance());
-
         return response;
     }
 
@@ -61,7 +82,7 @@ public class TripService {
         User client = extractUser(token);
 
         if (client.getRole() != Role.CLIENT) {
-            throw new RuntimeException("Seuls les clients peuvent créer des trajets");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Seuls les clients peuvent creer des trajets");
         }
 
         Trip trip = new Trip();
@@ -71,14 +92,20 @@ public class TripService {
         trip.setPoids(request.getPoids());
         trip.setClient(client);
 
-        // Utiliser le prix envoyé ou calculer un prix par défaut
         if (request.getPrix() != null && request.getPrix() > 0) {
             trip.setPrix(request.getPrix());
+            System.out.println("Prix recu du frontend: " + request.getPrix());
         } else {
-            trip.setPrix(10.0 + (request.getPoids() * 1.0));
+            double distance = request.getDistance() != null ? request.getDistance() : 0;
+            double poids = request.getPoids() != null ? request.getPoids() : 0;
+            double prixBase = 20.0;
+            double prixParKm = 5.0;
+            double prixParKg = 2.0;
+            double prixCalcule = prixBase + (distance * prixParKm) + (poids * prixParKg);
+            trip.setPrix(prixCalcule);
+            System.out.println("Prix calcule en backend (fallback): " + prixCalcule);
         }
 
-        // ⚠️ AJOUTER CES LIGNES - Stocker les coordonnées
         if (request.getStartLat() != null) {
             trip.setStartLat(request.getStartLat());
         }
@@ -95,17 +122,27 @@ public class TripService {
             trip.setDistance(request.getDistance());
         }
 
-        // Log pour déboguer
-        System.out.println("📍 Coordonnées reçues:");
-        System.out.println("   Départ: " + request.getStartLat() + ", " + request.getStartLng());
-        System.out.println("   Arrivée: " + request.getEndLat() + ", " + request.getEndLng());
-        System.out.println("   Distance: " + request.getDistance());
-
         Trip savedTrip = tripRepository.save(trip);
-        System.out.println("✅ Trajet créé avec succès: " + savedTrip.getId());
-        System.out.println("   Départ: " + savedTrip.getDepart());
-        System.out.println("   Arrivée: " + savedTrip.getArrivee());
-        System.out.println("   Distance: " + savedTrip.getDistance() + " km");
+        String tripLabel = "#" + String.format("%06d", savedTrip.getId());
+
+        notificationService.notifyUsers(
+                List.of(client),
+                "TRIP_CREATED",
+                "Votre commande " + tripLabel + " a ete creee.",
+                savedTrip.getId()
+        );
+        notificationService.notifyUsers(
+                userRepository.findAllByRole(Role.ADMIN),
+                "TRIP_CREATED",
+                "Nouvelle commande " + tripLabel + " creee par " + client.getNom(),
+                savedTrip.getId()
+        );
+        notificationService.notifyUsers(
+                userRepository.findAllByRole(Role.CHAUFFEUR),
+                "TRIP_CREATED",
+                "Nouvelle commande disponible " + tripLabel,
+                savedTrip.getId()
+        );
 
         return convertToResponse(savedTrip);
     }
@@ -121,7 +158,7 @@ public class TripService {
     public List<TripResponse> getAvailableTrips(String token) {
         User chauffeur = extractUser(token);
         if (chauffeur.getRole() != Role.CHAUFFEUR) {
-            throw new RuntimeException("Accès réservé aux chauffeurs");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Acces reserve aux chauffeurs");
         }
 
         return tripRepository.findByStatut(TripStatus.PENDING)
@@ -134,39 +171,59 @@ public class TripService {
     public TripResponse acceptTrip(Long tripId, String token) {
         User chauffeur = extractUser(token);
         if (chauffeur.getRole() != Role.CHAUFFEUR) {
-            throw new RuntimeException("Seuls les chauffeurs peuvent accepter des missions");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Seuls les chauffeurs peuvent accepter des missions");
         }
 
         Trip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new RuntimeException("Trajet non trouvé"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trajet non trouve"));
 
         if (trip.getStatut() != TripStatus.PENDING) {
-            throw new RuntimeException("Ce trajet n'est plus disponible");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ce trajet n'est plus disponible");
         }
 
         trip.setChauffeur(chauffeur);
         trip.setStatut(TripStatus.ACCEPTED);
+        Trip savedTrip = tripRepository.save(trip);
+        String tripLabel = "#" + String.format("%06d", savedTrip.getId());
 
-        return convertToResponse(tripRepository.save(trip));
+        notificationService.notifyUsers(
+                List.of(trip.getClient()),
+                "TRIP_ACCEPTED",
+                "Votre commande " + tripLabel + " a ete confirmee.",
+                savedTrip.getId()
+        );
+        notificationService.notifyUsers(
+                List.of(chauffeur),
+                "TRIP_ACCEPTED",
+                "Vous avez confirme la commande " + tripLabel + ".",
+                savedTrip.getId()
+        );
+        notificationService.notifyUsers(
+                userRepository.findAllByRole(Role.ADMIN),
+                "TRIP_ACCEPTED",
+                "La commande " + tripLabel + " a ete confirmee.",
+                savedTrip.getId()
+        );
+
+        return convertToResponse(savedTrip);
     }
 
     @Transactional
     public TripResponse startTrip(Long tripId, String token) {
         User chauffeur = extractUser(token);
         Trip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new RuntimeException("Trajet non trouvé"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trajet non trouve"));
 
-        if (!trip.getChauffeur().getId().equals(chauffeur.getId())) {
-            throw new RuntimeException("Vous n'êtes pas le chauffeur de ce trajet");
+        if (trip.getChauffeur() == null || !trip.getChauffeur().getId().equals(chauffeur.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Vous n'etes pas le chauffeur de ce trajet");
         }
 
         if (trip.getStatut() != TripStatus.ACCEPTED) {
-            throw new RuntimeException("Le trajet doit être accepté avant de démarrer");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Le trajet doit etre accepte avant de demarrer");
         }
 
         trip.setStatut(TripStatus.IN_PROGRESS);
         trip.setStartedAt(LocalDateTime.now());
-
         return convertToResponse(tripRepository.save(trip));
     }
 
@@ -174,20 +231,41 @@ public class TripService {
     public TripResponse completeTrip(Long tripId, String token) {
         User chauffeur = extractUser(token);
         Trip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new RuntimeException("Trajet non trouvé"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trajet non trouve"));
 
-        if (!trip.getChauffeur().getId().equals(chauffeur.getId())) {
-            throw new RuntimeException("Vous n'êtes pas le chauffeur de ce trajet");
+        if (trip.getChauffeur() == null || !trip.getChauffeur().getId().equals(chauffeur.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Vous n'etes pas le chauffeur de ce trajet");
         }
 
         if (trip.getStatut() != TripStatus.IN_PROGRESS) {
-            throw new RuntimeException("Le trajet doit être en cours pour le terminer");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Le trajet doit etre en cours pour le terminer");
         }
 
         trip.setStatut(TripStatus.COMPLETED);
         trip.setCompletedAt(LocalDateTime.now());
+        Trip savedTrip = tripRepository.save(trip);
+        String tripLabel = "#" + String.format("%06d", savedTrip.getId());
 
-        return convertToResponse(tripRepository.save(trip));
+        notificationService.notifyUsers(
+                List.of(trip.getClient()),
+                "TRIP_COMPLETED",
+                "Votre commande " + tripLabel + " a ete effectuee.",
+                savedTrip.getId()
+        );
+        notificationService.notifyUsers(
+                List.of(chauffeur),
+                "TRIP_COMPLETED",
+                "La commande " + tripLabel + " a ete marquee comme effectuee.",
+                savedTrip.getId()
+        );
+        notificationService.notifyUsers(
+                userRepository.findAllByRole(Role.ADMIN),
+                "TRIP_COMPLETED",
+                "La commande " + tripLabel + " a ete effectuee.",
+                savedTrip.getId()
+        );
+
+        return convertToResponse(savedTrip);
     }
 
     public List<TripResponse> getChauffeurTrips(String token) {

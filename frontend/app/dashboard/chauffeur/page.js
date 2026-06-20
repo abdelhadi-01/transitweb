@@ -22,6 +22,7 @@ import Link from 'next/link';
 import TripCard from '../../components/TripCard';
 import TripDetailModal from '../../components/TripDetailModal';
 import StatCard from '../../components/StatCard';
+import { formatCurrency } from '@/lib/currency';
 
 export default function ChauffeurDashboard() {
     const { user } = useAuth();
@@ -103,6 +104,7 @@ export default function ChauffeurDashboard() {
     const handleAcceptTrip = async (tripId) => {
         try {
             await tripApi.acceptTrip(tripId);
+            window.dispatchEvent(new Event('notifications:refresh'));
             toast.success('Mission acceptée avec succès');
             loadData(false);
         } catch (error) {
@@ -123,6 +125,7 @@ export default function ChauffeurDashboard() {
     const handleCompleteTrip = async (tripId) => {
         try {
             await tripApi.completeTrip(tripId);
+            window.dispatchEvent(new Event('notifications:refresh'));
             toast.success('Trajet terminé');
             loadData(false);
         } catch (error) {
@@ -202,7 +205,7 @@ export default function ChauffeurDashboard() {
                 <StatCard title="Missions totales" value={stats.total} icon={Package} color="bg-blue-500" />
                 <StatCard title="En cours" value={stats.inProgress} icon={Truck} color="bg-purple-500" />
                 <StatCard title="Terminées" value={stats.completed} icon={CheckCircle} color="bg-green-500" />
-                <StatCard title="Gains totaux" value={`${stats.earnings.toFixed(2)} €`} icon={DollarSign} color="bg-emerald-500" />
+                <StatCard title="Gains totaux" value={formatCurrency(stats.earnings)} icon={DollarSign} color="bg-emerald-500" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -234,7 +237,7 @@ export default function ChauffeurDashboard() {
                                             <div className="flex items-center gap-3 text-xs text-gray-500">
                                                 <span>📦 {trip.poids} kg</span>
                                                 {trip.distance && <span>📏 {trip.distance.toFixed(1)} km</span>}
-                                                <span>💰 {trip.prix?.toFixed(2)} €</span>
+                                                <span>💰 {formatCurrency(trip.prix)}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -291,7 +294,7 @@ export default function ChauffeurDashboard() {
                                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                                             <span>📦 {trip.poids} kg</span>
                                             {trip.distance && <span>📏 {trip.distance.toFixed(1)} km</span>}
-                                            <span>💰 {trip.prix?.toFixed(2)} €</span>
+                                            <span>💰 {formatCurrency(trip.prix)}</span>
                                         </div>
                                     </div>
                                     {trip.statut === 'ACCEPTED' && (

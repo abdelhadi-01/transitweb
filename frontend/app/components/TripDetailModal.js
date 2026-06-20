@@ -1,9 +1,10 @@
 'use client';
 
-import { X, MapPin, Package, Weight, Calendar, User, Euro, Clock, Truck, CheckCircle, Navigation, Phone, Mail, MessageCircle, ArrowLeft, Maximize2 } from 'lucide-react';
+import { X, MapPin, Package, Weight, Calendar, User, Clock, Truck, CheckCircle, Navigation, Phone, Mail, MessageCircle, ArrowLeft, Maximize2 } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import TripRouteMap from './TripRouteMap';
+import { formatCurrency } from '@/lib/currency';
 
 export default function TripDetailModal({ trip, onClose, userRole }) {
     const [showFullAddress, setShowFullAddress] = useState(false);
@@ -126,7 +127,7 @@ export default function TripDetailModal({ trip, onClose, userRole }) {
                         </div>
                         <div className="text-right">
                             <p className="text-sm text-gray-500">Prix</p>
-                            <p className="text-xl font-bold text-green-600">{trip.prix?.toFixed(2)} €</p>
+                            <p className="text-xl font-bold text-green-600">{formatCurrency(trip.prix)}</p>
                         </div>
                     </div>
 

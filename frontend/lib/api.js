@@ -1,45 +1,35 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://localhost:8080/api',
+    baseURL: '/api',
     headers: {
         'Content-Type': 'application/json',
     },
     timeout: 10000,
 });
 
-// Intercepteur pour ajouter le token
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+        config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
     }
-    console.log(`📤 [${config.method?.toUpperCase()}] ${config.url}`);
     return config;
-}, (error) => {
-    console.error('❌ Erreur requête:', error);
-    return Promise.reject(error);
-});
+}, (error) => Promise.reject(error));
 
-// Intercepteur pour les réponses
 api.interceptors.response.use(
-    (response) => {
-        console.log(`📥 [${response.status}] ${response.config.url}`);
-        return response;
-    },
+    (response) => response,
     (error) => {
-        console.error('❌ Erreur réponse:', error);
         if (error.response) {
-            console.error('   Status:', error.response.status);
-            console.error('   Data:', error.response.data);
+            const status = error.response.status;
+            const logger = status >= 500 ? console.error : console.warn;
+            logger(`API ${status} ${error.config?.url || ''}`, error.response.data);
         } else if (error.request) {
-            console.error('   Pas de réponse du serveur');
+            console.warn('API: no response from server');
         }
         return Promise.reject(error);
     }
 );
 
-// API Trips
 export const tripApi = {
     create: (data) => api.post('/trips', data),
     getClientTrips: () => api.get('/trips/client'),
@@ -50,13 +40,19 @@ export const tripApi = {
     completeTrip: (tripId) => api.put(`/trips/${tripId}/complete`),
 };
 
-// API Admin
 export const adminApi = {
     getDashboard: () => api.get('/admin/dashboard'),
     getUsers: () => api.get('/admin/users'),
     getTrips: () => api.get('/admin/trips'),
     deleteUser: (userId) => api.delete(`/admin/users/${userId}`),
     updateTripStatus: (tripId, status) => api.put(`/admin/trips/${tripId}/status?status=${status}`),
+};
+
+export const notificationApi = {
+    getMine: () => api.get('/notifications/me'),
+    getUnreadCount: () => api.get('/notifications/unread-count'),
+    markAsRead: (notificationId) => api.put(`/notifications/${notificationId}/read`),
+    markAllAsRead: () => api.put('/notifications/read-all'),
 };
 
 export default api;

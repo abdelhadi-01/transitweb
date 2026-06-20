@@ -62,7 +62,8 @@ public class Trip {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         statut = TripStatus.PENDING;
-        prix = 10.0;
+        // ✅ SUPPRIMER l'initialisation du prix ici
+        // Le prix sera défini par le service
     }
 
     // ===== GETTERS ET SETTERS =====

@@ -20,12 +20,15 @@ import {
     XCircle,
     AlertCircle,
     RefreshCw,
-    ArrowUpDown,
     Sparkles,
     X
 } from 'lucide-react';
 import Link from 'next/link';
 import TripDetailModal from '../../components/TripDetailModal';
+import { formatCurrency } from '@/lib/currency';
+
+const sortByCreatedAtDesc = (items) =>
+    [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
 export default function MissionsPage() {
     const { user } = useAuth();
@@ -37,7 +40,6 @@ export default function MissionsPage() {
     const [showDetailModal, setShowDetailModal] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [lastUpdate, setLastUpdate] = useState(null);
-    const [sortOrder, setSortOrder] = useState('desc');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
     const [showResults, setShowResults] = useState(false);
@@ -50,7 +52,7 @@ export default function MissionsPage() {
             setIsRefreshing(true);
             const response = await tripApi.getAvailableTrips();
 
-            const sortedData = sortMissions(response.data, sortOrder);
+            const sortedData = sortByCreatedAtDesc(response.data || []);
             setMissions(sortedData);
             setLastUpdate(new Date());
 
@@ -67,15 +69,6 @@ export default function MissionsPage() {
         }
     };
 
-    // Fonction de tri des missions
-    const sortMissions = (data, order) => {
-        return [...data].sort((a, b) => {
-            const dateA = new Date(a.createdAt).getTime();
-            const dateB = new Date(b.createdAt).getTime();
-            return order === 'desc' ? dateB - dateA : dateA - dateB;
-        });
-    };
-
     // Mettre à jour les résultats de recherche en temps réel
     useEffect(() => {
         if (searchTerm.trim()) {
@@ -85,7 +78,7 @@ export default function MissionsPage() {
                 mission.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 mission.clientNom?.toLowerCase().includes(searchTerm.toLowerCase())
             );
-            setSearchResults(results);
+            setSearchResults(sortByCreatedAtDesc(results));
             setShowResults(true);
         } else {
             setSearchResults([]);
@@ -108,17 +101,10 @@ export default function MissionsPage() {
         };
     }, []);
 
-    // Re-trier quand l'ordre change
-    useEffect(() => {
-        if (missions.length > 0) {
-            const sortedData = sortMissions(missions, sortOrder);
-            setMissions(sortedData);
-        }
-    }, [sortOrder]);
-
     const handleAcceptMission = async (tripId) => {
         try {
             await tripApi.acceptTrip(tripId);
+            window.dispatchEvent(new Event('notifications:refresh'));
             toast.success('✅ Mission acceptée avec succès !');
             loadMissions(false);
         } catch (error) {
@@ -135,10 +121,6 @@ export default function MissionsPage() {
 
     const handleManualRefresh = () => {
         loadMissions(true);
-    };
-
-    const toggleSortOrder = () => {
-        setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
     };
 
     const handleSearchFocus = () => {
@@ -178,7 +160,7 @@ export default function MissionsPage() {
         return filtered;
     };
 
-    const filteredMissions = getFilteredMissions();
+    const filteredMissions = sortByCreatedAtDesc(getFilteredMissions());
 
     const stats = {
         total: missions.length,
@@ -346,7 +328,7 @@ export default function MissionsPage() {
                                             </div>
                                         </div>
                                         <span className="text-sm font-semibold text-green-600 ml-4 whitespace-nowrap">
-                                            {mission.prix?.toFixed(2)} €
+                                            {formatCurrency(mission.prix)}
                                         </span>
                                     </div>
                                 ))}
@@ -456,7 +438,7 @@ export default function MissionsPage() {
                                         </div>
                                         <div className="flex flex-col items-end">
                                             <span className="text-lg font-bold text-green-600">
-                                                {mission.prix?.toFixed(2)} €
+                                                {formatCurrency(mission.prix)}
                                             </span>
                                             <span className="text-xs text-gray-400">
                                                 {formatDate(mission.createdAt)}

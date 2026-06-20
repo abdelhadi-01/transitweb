@@ -1,6 +1,7 @@
 'use client';
 
-import { MapPin, Package, Weight, Calendar, User, Euro, Clock, CheckCircle, Truck, Navigation, Eye } from 'lucide-react';
+import { MapPin, Package, Weight, Calendar, User, Clock, CheckCircle, Truck, Navigation, Eye } from 'lucide-react';
+import { formatCurrency } from '@/lib/currency';
 
 export default function TripCard({ trip, userRole, onAccept, onStart, onComplete, onClick }) {
     const getStatusText = (status) => {
@@ -52,7 +53,7 @@ export default function TripCard({ trip, userRole, onAccept, onStart, onComplete
                     </div>
                     {trip.prix && (
                         <span className="text-lg font-bold text-green-600">
-                            {trip.prix.toFixed(2)} €
+                            {formatCurrency(trip.prix)}
                         </span>
                     )}
                 </div>

@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import StatCard from '../../components/StatCard';
+import { formatCurrency } from '@/lib/currency';
+
+const sortByCreatedAtDesc = (items) =>
+    [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
 export default function AdminDashboard() {
     const { user } = useAuth();
@@ -76,12 +80,12 @@ export default function AdminDashboard() {
             // Charger les trajets récents
             const tripsResponse = await adminApi.getTrips();
             const trips = tripsResponse.data || [];
-            setRecentTrips(trips.slice(0, 5));
+            setRecentTrips(sortByCreatedAtDesc(trips).slice(0, 5));
 
             // Charger les utilisateurs récents
             const usersResponse = await adminApi.getUsers();
             const users = usersResponse.data || [];
-            setRecentUsers(users.slice(0, 5));
+            setRecentUsers(sortByCreatedAtDesc(users).slice(0, 5));
 
             setLastUpdate(new Date());
 
@@ -156,7 +160,7 @@ export default function AdminDashboard() {
         { title: 'En attente', value: stats.pendingTrips, icon: Clock, color: 'bg-yellow-500' },
         { title: 'En cours', value: stats.inProgressTrips, icon: Activity, color: 'bg-purple-500' },
         { title: 'Terminés', value: stats.completedTrips, icon: CheckCircle, color: 'bg-green-500' },
-        { title: 'Chiffre d\'affaires', value: `${stats.totalRevenue.toFixed(2)} €`, icon: DollarSign, color: 'bg-emerald-500' },
+        { title: 'Chiffre d\'affaires', value: formatCurrency(stats.totalRevenue), icon: DollarSign, color: 'bg-emerald-500' },
         { title: 'Chauffeurs actifs', value: stats.activeChauffeurs, icon: Truck, color: 'bg-purple-500' },
         { title: 'Clients actifs', value: stats.activeClients, icon: Users, color: 'bg-blue-500' },
     ];
@@ -223,7 +227,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-white/80">Revenus aujourd'hui</p>
-                            <p className="text-2xl font-bold">{dailyStats.todayRevenue.toFixed(2)} €</p>
+                            <p className="text-2xl font-bold">{formatCurrency(dailyStats.todayRevenue)}</p>
                         </div>
                         <DollarSign className="w-8 h-8 text-white/60" />
                     </div>
@@ -287,7 +291,7 @@ export default function AdminDashboard() {
                                             </div>
                                             <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
                                                 <span>👤 {trip.clientNom}</span>
-                                                <span>💰 {trip.prix?.toFixed(2)} €</span>
+                                                <span>💰 {formatCurrency(trip.prix)}</span>
                                                 <span>📅 {formatDate(trip.createdAt)}</span>
                                             </div>
                                         </div>
@@ -384,7 +388,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-white/80">Statistiques globales</p>
-                            <p className="text-lg font-semibold mt-1">💰 {stats.totalRevenue.toFixed(2)} €</p>
+                            <p className="text-lg font-semibold mt-1">💰 {formatCurrency(stats.totalRevenue)}</p>
                         </div>
                         <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition">
                             <BarChart3 className="w-6 h-6" />

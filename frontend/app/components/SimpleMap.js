@@ -1,10 +1,11 @@
-'use client';
+﻿'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Crosshair, MapPin, Check, Move, Search } from 'lucide-react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '@/lib/currency';
 
 export default function SimpleMap({ onSelectLocation, selectionMode, startLocation, endLocation, itemWeight }) {
     const mapContainer = useRef(null);
@@ -19,44 +20,46 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
-    const [distanceInfo, setDistanceInfo] = useState(null);
 
     // Calcul de distance (formule Haversine)
-    const calculateDistance = (lat1, lon1, lat2, lon2) => {
-        const R = 6371; // Rayon de la Terre en km
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat1 * Math.PI) / 180) *
+                Math.cos((lat2 * Math.PI) / 180) *
+                Math.sin(dLon / 2) *
+                Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
-    };
+    }
 
     // Calcul du prix estimé avec poids
-    const calculatePrice = (distance, poids = 0) => {
-        const prixBase = 5; // Prix de base en €
-        const prixParKm = 0.5; // € par km
-        const prixParKg = 0.2; // € par kg
-        return prixBase + (distance * prixParKm) + (poids * prixParKg);
-    };
+    function calculatePrice(distance, poids = 0) {
+        const prixBase = 20;
+        const prixParKm = 5;
+        const prixParKg = 2;
+        return prixBase + distance * prixParKm + poids * prixParKg;
+    }
 
-    // Mettre à jour la distance quand les points ou le poids changent
-    useEffect(() => {
-        if (startLocation && endLocation) {
-            const distance = calculateDistance(
-                startLocation.lat, startLocation.lng,
-                endLocation.lat, endLocation.lng
-            );
-            const poids = parseFloat(itemWeight) || 0;
-            setDistanceInfo({
-                distance: distance,
-                price: calculatePrice(distance, poids),
-                poids: poids
-            });
-        } else {
-            setDistanceInfo(null);
-        }
+    const distanceInfo = useMemo(() => {
+        if (!startLocation || !endLocation) return null;
+
+        const distance = calculateDistance(
+            startLocation.lat,
+            startLocation.lng,
+            endLocation.lat,
+            endLocation.lng
+        );
+        const poids = parseFloat(itemWeight) || 0;
+
+        return {
+            distance,
+            price: calculatePrice(distance, poids),
+            poids
+        };
     }, [startLocation, endLocation, itemWeight]);
 
     // Initialiser la carte
@@ -71,13 +74,13 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
             attributionControl: true,
         });
 
-        // Contrôles de navigation
+        // ContrÃ´les de navigation
         map.current.addControl(new maplibregl.NavigationControl({
             showZoom: true,
             showCompass: false,
         }), 'top-right');
 
-        // Chargement terminé
+        // Chargement terminÃ©
         map.current.on('load', () => {
             setIsMapLoaded(true);
         });
@@ -90,7 +93,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
             setCenter(newCenter);
         });
 
-        // Début du glissement
+        // DÃ©but du glissement
         map.current.on('dragstart', () => {
             setIsDragging(true);
         });
@@ -109,14 +112,14 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
         };
     }, []);
 
-    // Mettre à jour la vue quand zoom change
+    // Mettre Ã  jour la vue quand zoom change
     useEffect(() => {
         if (map.current && isMapLoaded) {
             map.current.setZoom(zoom);
         }
     }, [zoom]);
 
-    // Mettre à jour la vue quand center change
+    // Mettre Ã  jour la vue quand center change
     useEffect(() => {
         if (map.current && isMapLoaded && !isDragging) {
             map.current.flyTo({
@@ -147,7 +150,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
         }
     };
 
-    // Sélectionner un résultat de recherche
+    // SÃ©lectionner un rÃ©sultat de recherche
     const handleSelectResult = async (result) => {
         const lat = parseFloat(result.lat);
         const lng = parseFloat(result.lon);
@@ -171,7 +174,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
             lng: lng,
             address: result.display_name
         });
-        toast.success(`📍 ${selectionMode === 'start' ? 'Départ' : 'Arrivée'} sélectionné`);
+        toast.success(`ðŸ“ ${selectionMode === 'start' ? 'DÃ©part' : 'ArrivÃ©e'} sÃ©lectionnÃ©`);
     };
 
     // Utiliser la position actuelle
@@ -203,7 +206,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                             lng: longitude,
                             address: address
                         });
-                        toast.success('📍 Position actuelle sélectionnée');
+                        toast.success('ðŸ“ Position actuelle sÃ©lectionnÃ©e');
                     } catch (error) {
                         onSelectLocation({
                             lat: latitude,
@@ -212,14 +215,14 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                         });
                     }
                 },
-                () => toast.error('Impossible de récupérer votre position')
+                () => {}
             );
         } else {
-            toast.error('Géolocalisation non supportée');
+            return;
         }
     };
 
-    // Sélectionner la position actuelle
+    // SÃ©lectionner la position actuelle
     const handleSelectCurrentPosition = async () => {
         const lat = currentCenter.lat;
         const lng = currentCenter.lng;
@@ -236,7 +239,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                 lng: lng,
                 address: address
             });
-            toast.success(`📍 ${selectionMode === 'start' ? 'Départ' : 'Arrivée'} sélectionné !`);
+            toast.success(`ðŸ“ ${selectionMode === 'start' ? 'DÃ©part' : 'ArrivÃ©e'} sÃ©lectionnÃ© !`);
         } catch (error) {
             onSelectLocation({
                 lat: lat,
@@ -280,7 +283,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                     </button>
                 </div>
 
-                {/* Résultats de recherche */}
+                {/* RÃ©sultats de recherche */}
                 {showSearch && searchResults.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-60 overflow-y-auto z-50">
                         {searchResults.map((result, index) => (
@@ -334,7 +337,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                     </div>
                 </div>
 
-                {/* Indicateur d'état */}
+                {/* Indicateur d'Ã©tat */}
                 <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-30 px-4 py-1.5 rounded-full text-xs flex items-center gap-2 transition-all ${
                     isDragging
                         ? 'bg-blue-600 text-white'
@@ -343,7 +346,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                     {isDragging ? (
                         <>
                             <Move className="w-3 h-3 animate-pulse" />
-                            Déplacement...
+                            DÃ©placement...
                         </>
                     ) : (
                         <>
@@ -353,7 +356,7 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                     )}
                 </div>
 
-                {/* Bouton de sélection */}
+                {/* Bouton de sÃ©lection */}
                 <div className={`absolute bottom-24 left-1/2 transform -translate-x-1/2 z-30 transition-all ${
                     isDragging ? 'opacity-50 scale-95' : 'opacity-100 scale-100'
                 }`}>
@@ -365,49 +368,49 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                         }`}
                     >
                         <Check className="w-5 h-5" />
-                        Sélectionner cette position
+                        SÃ©lectionner cette position
                     </button>
                 </div>
 
                 {/* Attribution */}
                 <div className="absolute bottom-1 right-1 text-[10px] text-gray-600 bg-white bg-opacity-80 px-1 rounded z-30">
-                    © OpenFreeMap | OpenStreetMap
+                    Â© OpenFreeMap | OpenStreetMap
                 </div>
             </div>
 
-            {/* Affichage distance et prix estimé avec poids */}
+            {/* Affichage distance et prix estimÃ© avec poids */}
             {distanceInfo && (
                 <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg shadow p-4 border border-blue-200">
                     <div className="grid grid-cols-3 gap-2">
                         <div className="text-center">
-                            <div className="text-xs text-gray-500">📏 Distance</div>
+                            <div className="text-xs text-gray-500">ðŸ“ Distance</div>
                             <div className="text-lg font-bold text-blue-600">
                                 {distanceInfo.distance.toFixed(1)} km
                             </div>
                         </div>
                         <div className="text-center">
-                            <div className="text-xs text-gray-500">⚖️ Poids</div>
+                            <div className="text-xs text-gray-500">âš–ï¸ Poids</div>
                             <div className="text-lg font-bold text-purple-600">
                                 {distanceInfo.poids} kg
                             </div>
                         </div>
                         <div className="text-center">
-                            <div className="text-xs text-gray-500">💰 Prix estimé</div>
+                            <div className="text-xs text-gray-500">ðŸ’° Prix estimÃ©</div>
                             <div className="text-lg font-bold text-green-600">
-                                {distanceInfo.price.toFixed(2)} €
+                                {formatCurrency(distanceInfo.price)}
                             </div>
                         </div>
                     </div>
                     <div className="text-center text-xs text-gray-400 mt-2">
                         {distanceInfo.poids > 0
-                            ? `Prix calculé : 5€ + (${distanceInfo.distance.toFixed(1)} km × 0.5€) + (${distanceInfo.poids} kg × 0.2€) = ${distanceInfo.price.toFixed(2)}€`
-                            : `Prix calculé : 5€ + (${distanceInfo.distance.toFixed(1)} km × 0.5€) = ${distanceInfo.price.toFixed(2)}€`
+                            ? `Prix calculé : 20 MAD + (${distanceInfo.distance.toFixed(1)} km × 5 MAD) + (${distanceInfo.poids} kg × 2 MAD) = ${formatCurrency(distanceInfo.price)}`
+                            : `Prix calculé : 20 MAD + (${distanceInfo.distance.toFixed(1)} km × 5 MAD) = ${formatCurrency(distanceInfo.price)}`
                         }
                     </div>
                 </div>
             )}
 
-            {/* Résumé */}
+            {/* RÃ©sumÃ© */}
             <div className="bg-white rounded-lg shadow p-3">
                 <div className="flex items-center gap-2 text-sm">
                     <MapPin className="w-4 h-4 text-blue-500" />
@@ -425,10 +428,10 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
             <div className="text-center text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
                 <div className="flex items-center justify-center gap-4 flex-wrap">
                     <span className="flex items-center gap-1">
-                        <span className="font-medium">🖱️ Glissez</span> sur la carte pour naviguer
+                        <span className="font-medium">ðŸ–±ï¸ Glissez</span> sur la carte pour naviguer
                     </span>
                     <span className="flex items-center gap-1">
-                        <span className="font-medium">➕/-</span> pour zoomer
+                        <span className="font-medium">âž•/-</span> pour zoomer
                     </span>
                     <span className="flex items-center gap-1 text-blue-600 font-medium">
                         <Check className="w-4 h-4" />
@@ -436,9 +439,10 @@ export default function SimpleMap({ onSelectLocation, selectionMode, startLocati
                     </span>
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                    📍 Le curseur rouge indique la position qui sera sélectionnée
+                    ðŸ“ Le curseur rouge indique la position qui sera sÃ©lectionnÃ©e
                 </div>
             </div>
         </div>
     );
 }
+

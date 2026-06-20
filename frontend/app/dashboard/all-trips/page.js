@@ -22,6 +22,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import TripDetailModal from '../../components/TripDetailModal';
+import { formatCurrency } from '@/lib/currency';
+
+const sortByCreatedAtDesc = (items) =>
+    [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
 export default function AllTripsPage() {
     const { user } = useAuth();
@@ -54,7 +58,7 @@ export default function AllTripsPage() {
             arrivee: 'Rabat, Maroc',
             description: 'Colis standard - Documents',
             poids: 15.5,
-            prix: 45.00,
+            prix: 4500.00,
             statut: 'COMPLETED',
             clientNom: 'Jean Dupont',
             chauffeurNom: 'Ahmed Benjelloun',
@@ -67,7 +71,7 @@ export default function AllTripsPage() {
             arrivee: 'Casablanca, Maroc',
             description: 'Équipement électronique - Fragile',
             poids: 8.0,
-            prix: 60.00,
+            prix: 6000.00,
             statut: 'IN_PROGRESS',
             clientNom: 'Marie Martin',
             chauffeurNom: 'Karim Mansouri',
@@ -80,7 +84,7 @@ export default function AllTripsPage() {
             arrivee: 'Tanger, Maroc',
             description: 'Mobilier - Canapé 3 places',
             poids: 50.0,
-            prix: 80.00,
+            prix: 8000.00,
             statut: 'PENDING',
             clientNom: 'Pierre Durand',
             chauffeurNom: null,
@@ -93,7 +97,7 @@ export default function AllTripsPage() {
             arrivee: 'Agadir, Maroc',
             description: 'Produits frais - Urgent',
             poids: 30.0,
-            prix: 95.00,
+            prix: 9500.00,
             statut: 'ACCEPTED',
             clientNom: 'Sophie Bernard',
             chauffeurNom: 'Ahmed Benjelloun',
@@ -106,7 +110,7 @@ export default function AllTripsPage() {
             arrivee: 'Meknès, Maroc',
             description: 'Documents sensibles',
             poids: 2.0,
-            prix: 35.00,
+            prix: 3500.00,
             statut: 'CANCELLED',
             clientNom: 'Lucas Moreau',
             chauffeurNom: null,
@@ -119,7 +123,7 @@ export default function AllTripsPage() {
             arrivee: 'Casablanca, Maroc',
             description: 'Pièces automobiles',
             poids: 75.0,
-            prix: 120.00,
+            prix: 12000.00,
             statut: 'COMPLETED',
             clientNom: 'Ahmed Alaoui',
             chauffeurNom: 'Karim Mansouri',
@@ -142,7 +146,7 @@ export default function AllTripsPage() {
                 trip.clientNom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 trip.chauffeurNom?.toLowerCase().includes(searchTerm.toLowerCase())
             );
-            setSearchResults(results);
+            setSearchResults(sortByCreatedAtDesc(results));
             setShowResults(true);
         } else {
             setSearchResults([]);
@@ -159,15 +163,17 @@ export default function AllTripsPage() {
             const response = await adminApi.getTrips();
 
             if (response.data && response.data.length > 0) {
-                setTrips(response.data);
-                updateStats(response.data);
+                const sortedTrips = sortByCreatedAtDesc(response.data);
+                setTrips(sortedTrips);
+                updateStats(sortedTrips);
                 if (showToast) {
                     toast.success('🔄 Trajets chargés depuis la base de données');
                 }
             } else {
                 // Si le backend renvoie une liste vide, utiliser les données par défaut
-                setTrips(defaultTrips);
-                updateStats(defaultTrips);
+                const sortedDefaults = sortByCreatedAtDesc(defaultTrips);
+                setTrips(sortedDefaults);
+                updateStats(sortedDefaults);
                 setIsUsingMockData(true);
                 if (showToast) {
                     toast.info('📋 Utilisation des trajets par défaut');
@@ -176,8 +182,9 @@ export default function AllTripsPage() {
         } catch (error) {
             console.error('Erreur loadTrips:', error);
             // En cas d'erreur, utiliser les données par défaut
-            setTrips(defaultTrips);
-            updateStats(defaultTrips);
+            const sortedDefaults = sortByCreatedAtDesc(defaultTrips);
+            setTrips(sortedDefaults);
+            updateStats(sortedDefaults);
             setIsUsingMockData(true);
             if (showToast) {
                 toast.info('📋 Utilisation des trajets par défaut (backend indisponible)');
@@ -245,7 +252,7 @@ export default function AllTripsPage() {
         return filtered;
     };
 
-    const filteredTrips = getFilteredTrips();
+    const filteredTrips = sortByCreatedAtDesc(getFilteredTrips());
 
     const getStatusLabel = (status) => {
         const labels = {
@@ -296,7 +303,7 @@ export default function AllTripsPage() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="mx-auto w-full max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
             {/* En-tête avec indicateur de source */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
@@ -460,7 +467,7 @@ export default function AllTripsPage() {
                                             )}
                                             <span className="flex items-center gap-1">
                                                 <DollarSign className="w-3.5 h-3.5" />
-                                                {trip.prix?.toFixed(2)} €
+                                                {formatCurrency(trip.prix)}
                                             </span>
                                             <span className="flex items-center gap-1">
                                                 <User className="w-3.5 h-3.5" />

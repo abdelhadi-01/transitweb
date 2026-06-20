@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { adminApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
@@ -19,17 +18,24 @@ import {
     Database
 } from 'lucide-react';
 
+const normalizeUsers = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.users)) return payload.users;
+    if (Array.isArray(payload?.content)) return payload.content;
+    return [];
+};
+
+const sortByCreatedAtDesc = (items) =>
+    [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
 export default function UsersPage() {
-    const { user } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('all');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
-    const [searchResults, setSearchResults] = useState([]);
-    const [showResults, setShowResults] = useState(false);
-    const [isUsingMockData, setIsUsingMockData] = useState(false);
     const searchInputRef = useRef(null);
     const [stats, setStats] = useState({
         total: 0,
@@ -38,159 +44,76 @@ export default function UsersPage() {
         admins: 0
     });
 
-    // Utilisateurs par défaut (de votre base de données)
-    const defaultUsers = [
-        {
-            id: 1,
-            nom: 'Abdolhadi Elidrissi',
-            email: 'admin@demo.com',
-            telephone: '0766612568',
-            role: 'CLIENT',
-            createdAt: '2026-06-15 18:32:07.000000'
-        },
-        {
-            id: 2,
-            nom: 'Hamza',
-            email: 'hamza@demo.com',
-            telephone: '0612345668',
-            role: 'CHAUFFEUR',
-            createdAt: '2026-06-15 18:40:35.000000'
-        },
-        {
-            id: 3,
-            nom: 'Super Admin',
-            email: 'superadmin@transitweb.com',
-            telephone: '0612345678',
-            role: 'ADMIN',
-            createdAt: '2026-06-17 18:32:00.000000'
-        },
-        {
-            id: 4,
-            nom: 'Administrateur',
-            email: 'admin@transitweb.com',
-            telephone: '0612345678',
-            role: 'ADMIN',
-            createdAt: '2026-06-17 18:46:00.000000'
-        },
-        {
-            id: 5,
-            nom: 'Hamid',
-            email: 'hamid@tr.com',
-            telephone: '07666',
-            role: 'CLIENT',
-            createdAt: '2026-06-17 18:48:00.000000'
-        },
-        {
-            id: 6,
-            nom: 'Walid',
-            email: 'walid@transitweb.com',
-            telephone: '07666',
-            role: 'CLIENT',
-            createdAt: '2026-06-17 18:58:30.000000'
-        }
-    ];
-
-    useEffect(() => {
-        loadUsers();
+    const updateStats = useCallback((data) => {
+        const total = data.length;
+        const clients = data.filter((u) => u.role === 'CLIENT').length;
+        const chauffeurs = data.filter((u) => u.role === 'CHAUFFEUR').length;
+        const admins = data.filter((u) => u.role === 'ADMIN').length;
+        setStats({ total, clients, chauffeurs, admins });
     }, []);
 
-    // Mettre à jour les résultats de recherche en temps réel
-    useEffect(() => {
-        if (searchTerm.trim()) {
-            const results = users.filter(user =>
-                user.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                user.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                user.role?.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-            setSearchResults(results);
-            setShowResults(true);
-        } else {
-            setSearchResults([]);
-            setShowResults(false);
-        }
-    }, [searchTerm, users]);
-
-    const loadUsers = async (showToast = false) => {
+    const loadUsers = useCallback(async (showToast = false) => {
         try {
             setIsRefreshing(true);
-            setIsUsingMockData(false);
 
-            // Essayer de charger depuis le backend
             const response = await adminApi.getUsers();
+            const data = sortByCreatedAtDesc(normalizeUsers(response.data));
 
-            if (response.data && response.data.length > 0) {
-                setUsers(response.data);
-                updateStats(response.data);
-                if (showToast) {
-                    toast.success('🔄 Utilisateurs chargés depuis la base de données');
-                }
-            } else {
-                // Si le backend renvoie une liste vide, utiliser les données par défaut
-                setUsers(defaultUsers);
-                updateStats(defaultUsers);
-                setIsUsingMockData(true);
-                if (showToast) {
-                    toast.info('📋 Utilisation des données par défaut');
-                }
+            setUsers(data);
+            updateStats(data);
+
+            if (showToast) {
+                toast.success(
+                    data.length > 0
+                        ? 'Utilisateurs chargés depuis la base de données'
+                        : 'Aucun utilisateur trouvé dans la base de données'
+                );
             }
         } catch (error) {
             console.error('Erreur loadUsers:', error);
-            // En cas d'erreur, utiliser les données par défaut
-            setUsers(defaultUsers);
-            updateStats(defaultUsers);
-            setIsUsingMockData(true);
-            if (showToast) {
-                toast.info('📋 Utilisation des données par défaut (backend indisponible)');
-            }
+            setUsers([]);
+            updateStats([]);
+            toast.error('Impossible de charger les utilisateurs depuis le backend');
         } finally {
             setIsRefreshing(false);
             setLoading(false);
         }
-    };
+    }, [updateStats]);
 
-    const updateStats = (data) => {
-        const total = data.length;
-        const clients = data.filter(u => u.role === 'CLIENT').length;
-        const chauffeurs = data.filter(u => u.role === 'CHAUFFEUR').length;
-        const admins = data.filter(u => u.role === 'ADMIN').length;
-        setStats({ total, clients, chauffeurs, admins });
-    };
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            void loadUsers();
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [loadUsers]);
 
     const handleDeleteUser = async (userId) => {
         if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) return;
 
         try {
-            if (!isUsingMockData) {
-                await adminApi.deleteUser(userId);
-            }
-            // Supprimer localement
-            const updatedUsers = users.filter(u => u.id !== userId);
+            await adminApi.deleteUser(userId);
+            const updatedUsers = users.filter((entry) => entry.id !== userId);
             setUsers(updatedUsers);
             updateStats(updatedUsers);
-            toast.success('✅ Utilisateur supprimé');
-        } catch (error) {
+            toast.success('Utilisateur supprimé');
+        } catch {
             toast.error('Erreur lors de la suppression');
         }
     };
 
     const handleSearchFocus = () => {
         setIsSearchFocused(true);
-        if (searchTerm.trim()) {
-            setShowResults(true);
-        }
     };
 
     const handleSearchBlur = () => {
         setTimeout(() => {
             setIsSearchFocused(false);
-            setShowResults(false);
         }, 200);
     };
 
     const clearSearch = () => {
         setSearchTerm('');
-        setShowResults(false);
         if (searchInputRef.current) {
             searchInputRef.current.focus();
         }
@@ -200,15 +123,15 @@ export default function UsersPage() {
         let filtered = users;
 
         if (filterRole !== 'all') {
-            filtered = filtered.filter(u => u.role === filterRole.toUpperCase());
+            filtered = filtered.filter((entry) => entry.role === filterRole.toUpperCase());
         }
 
         if (searchTerm) {
-            filtered = filtered.filter(u =>
-                u.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                u.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                u.role?.toLowerCase().includes(searchTerm.toLowerCase())
+            filtered = filtered.filter((entry) =>
+                entry.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                entry.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                entry.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                entry.role?.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
 
@@ -219,18 +142,18 @@ export default function UsersPage() {
 
     const getRoleLabel = (role) => {
         const labels = {
-            'CLIENT': 'Client',
-            'CHAUFFEUR': 'Chauffeur',
-            'ADMIN': 'Administrateur'
+            CLIENT: 'Client',
+            CHAUFFEUR: 'Chauffeur',
+            ADMIN: 'Administrateur'
         };
         return labels[role] || role;
     };
 
     const getRoleColor = (role) => {
         const colors = {
-            'CLIENT': 'bg-blue-100 text-blue-700',
-            'CHAUFFEUR': 'bg-green-100 text-green-700',
-            'ADMIN': 'bg-purple-100 text-purple-700'
+            CLIENT: 'bg-blue-100 text-blue-700',
+            CHAUFFEUR: 'bg-green-100 text-green-700',
+            ADMIN: 'bg-purple-100 text-purple-700'
         };
         return colors[role] || 'bg-gray-100 text-gray-700';
     };
@@ -258,11 +181,13 @@ export default function UsersPage() {
 
     return (
         <div className="space-y-6">
-            {/* En-tête avec indicateur de source */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">👥 Gestion des utilisateurs</h1>
-
+                    <h1 className="text-2xl font-bold text-gray-900">Gestion des utilisateurs</h1>
+                    <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+                        <Database className="w-4 h-4" />
+                        <span>Affichage des comptes enregistrés en base</span>
+                    </div>
                 </div>
                 <button
                     onClick={() => loadUsers(true)}
@@ -278,7 +203,6 @@ export default function UsersPage() {
                 </button>
             </div>
 
-            {/* Statistiques */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
                     <div className="flex items-center justify-between">
@@ -326,7 +250,6 @@ export default function UsersPage() {
                 </div>
             </div>
 
-            {/* Barre de recherche et filtres */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                     <div className="relative flex-1 sm:flex-initial min-w-[200px] sm:min-w-[280px]">
@@ -378,7 +301,6 @@ export default function UsersPage() {
                 </span>
             </div>
 
-            {/* Liste des utilisateurs */}
             {filteredUsers.length === 0 ? (
                 <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-gray-100">
                     <div className="flex justify-center mb-4">
@@ -391,8 +313,8 @@ export default function UsersPage() {
                     </h3>
                     <p className="text-gray-500 text-sm">
                         {searchTerm
-                            ? 'Essayez avec d\'autres mots-clés'
-                            : 'Commencez à ajouter des utilisateurs'}
+                            ? 'Essayez avec d’autres mots-clés'
+                            : 'Les comptes créés apparaissent ici dès qu’ils sont enregistrés en base'}
                     </p>
                 </div>
             ) : (
@@ -409,36 +331,36 @@ export default function UsersPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {filteredUsers.map((user) => (
-                                    <tr key={user.id} className="hover:bg-gray-50 transition">
+                                {filteredUsers.map((entry) => (
+                                    <tr key={entry.id} className="hover:bg-gray-50 transition">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-                                                    {user.nom?.charAt(0) || '?'}
+                                                    {entry.nom?.charAt(0) || '?'}
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-gray-900">{user.nom}</p>
-                                                    <p className="text-sm text-gray-500">{user.email}</p>
+                                                    <p className="font-medium text-gray-900">{entry.nom}</p>
+                                                    <p className="text-sm text-gray-500">{entry.email}</p>
                                                 </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
-                                                {getRoleLabel(user.role)}
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleColor(entry.role)}`}>
+                                                {getRoleLabel(entry.role)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="space-y-1 text-sm">
-                                                {user.telephone && (
+                                                {entry.telephone && (
                                                     <div className="flex items-center gap-1 text-gray-600">
                                                         <Phone className="w-3.5 h-3.5" />
-                                                        {user.telephone}
+                                                        {entry.telephone}
                                                     </div>
                                                 )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500">
-                                            {formatDate(user.createdAt)}
+                                            {formatDate(entry.createdAt)}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
@@ -448,9 +370,9 @@ export default function UsersPage() {
                                                 >
                                                     <Eye className="w-4 h-4 text-gray-400" />
                                                 </button>
-                                                {user.role !== 'ADMIN' && (
+                                                {entry.role !== 'ADMIN' && (
                                                     <button
-                                                        onClick={() => handleDeleteUser(user.id)}
+                                                        onClick={() => handleDeleteUser(entry.id)}
                                                         className="p-2 hover:bg-red-50 rounded-lg transition"
                                                         title="Supprimer"
                                                     >

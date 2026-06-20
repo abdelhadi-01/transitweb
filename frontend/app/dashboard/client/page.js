@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { tripApi } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -12,13 +12,15 @@ import {
     MapPin,
     Calendar,
     Plus,
-    ArrowUpRight
+    ArrowUpRight,
+    RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 import TripCard from '../../components/TripCard';
 import TripDetailModal from '../../components/TripDetailModal';
 import CreateTripForm from '../../components/CreateTripForm';
 import StatCard from '../../components/StatCard';
+import { formatCurrency } from '@/lib/currency';
 
 export default function ClientDashboard() {
     const { user } = useAuth();
@@ -27,6 +29,9 @@ export default function ClientDashboard() {
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [selectedTrip, setSelectedTrip] = useState(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [lastUpdate, setLastUpdate] = useState(null);
+    const intervalRef = useRef(null);
     const [stats, setStats] = useState({
         total: 0,
         pending: 0,
@@ -34,43 +39,71 @@ export default function ClientDashboard() {
         completed: 0
     });
 
-    useEffect(() => {
-        loadTrips();
-    }, []);
-
-    useEffect(() => {
-        const total = trips.length;
-        const pending = trips.filter(t => t.statut === 'PENDING').length;
-        const inProgress = trips.filter(t => t.statut === 'IN_PROGRESS' || t.statut === 'ACCEPTED').length;
-        const completed = trips.filter(t => t.statut === 'COMPLETED').length;
-        setStats({ total, pending, inProgress, completed });
-    }, [trips]);
-
-    const loadTrips = async () => {
+    // Charger les trajets
+    const loadTrips = async (showToast = false) => {
         try {
+            setIsRefreshing(true);
             const response = await tripApi.getClientTrips();
             setTrips(response.data);
+            setLastUpdate(new Date());
+
+            // Mettre à jour les stats
+            const total = response.data.length;
+            const pending = response.data.filter(t => t.statut === 'PENDING').length;
+            const inProgress = response.data.filter(t => t.statut === 'IN_PROGRESS' || t.statut === 'ACCEPTED').length;
+            const completed = response.data.filter(t => t.statut === 'COMPLETED').length;
+            setStats({ total, pending, inProgress, completed });
+
+            if (showToast) {
+                toast.success('🔄 Trajets mis à jour');
+            }
         } catch (error) {
-            toast.error('Erreur lors du chargement des trajets');
+            if (showToast) {
+                toast.error('Erreur lors du chargement des trajets');
+            }
         } finally {
+            setIsRefreshing(false);
             setLoading(false);
         }
     };
 
+    // Chargement initial et actualisation automatique
+    useEffect(() => {
+        loadTrips();
+
+        // Actualisation automatique toutes les 5 secondes
+        intervalRef.current = setInterval(() => {
+            loadTrips(false);
+        }, 5000);
+
+        // Nettoyer l'intervalle
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, []);
+
     const handleCreateTrip = async (tripData) => {
         try {
             await tripApi.create(tripData);
-            toast.success('Demande de transport créée avec succès');
+            window.dispatchEvent(new Event('notifications:refresh'));
+            toast.success('✅ Demande de transport créée avec succès');
             setShowCreateForm(false);
-            loadTrips();
+            // Recharger immédiatement après création
+            await loadTrips(false);
         } catch (error) {
-            toast.error("Erreur lors de la création");
+            toast.error("❌ Erreur lors de la création");
         }
     };
 
     const handleTripClick = (trip) => {
         setSelectedTrip(trip);
         setShowDetailModal(true);
+    };
+
+    const handleManualRefresh = () => {
+        loadTrips(true);
     };
 
     const recentTrips = trips.slice(0, 4);
@@ -88,20 +121,53 @@ export default function ClientDashboard() {
 
     return (
         <div className="space-y-6">
+            {/* En-tête avec statut en temps réel */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-
-
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        Bonjour, {user?.nom} 👋
+                    </h1>
+                    <div className="flex items-center gap-3 mt-1">
+                        <p className="text-sm text-gray-500">
+                            Voici un résumé de vos activités de transport
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                            <div className={`w-2 h-2 rounded-full ${isRefreshing ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}></div>
+                            <span className="text-xs text-gray-400">
+                                {isRefreshing ? 'Mise à jour...' : 'En direct'}
+                            </span>
+                        </div>
+                        {lastUpdate && (
+                            <span className="text-xs text-gray-400">
+                                • {lastUpdate.toLocaleTimeString()}
+                            </span>
+                        )}
+                    </div>
                 </div>
-                <button
-                    onClick={() => setShowCreateForm(true)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl flex items-center gap-2 font-medium shadow-lg shadow-blue-100 transition-all duration-300 hover:scale-105"
-                >
-                    <Plus className="w-4 h-4" />
-                    Nouvelle demande
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleManualRefresh}
+                        disabled={isRefreshing}
+                        className={`px-4 py-2 rounded-xl flex items-center gap-2 transition ${
+                            isRefreshing
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                    >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        {isRefreshing ? 'Mise à jour...' : 'Actualiser'}
+                    </button>
+                    <button
+                        onClick={() => setShowCreateForm(true)}
+                        className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl flex items-center gap-2 font-medium shadow-lg shadow-blue-100 transition-all duration-300 hover:scale-105"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Nouvelle demande
+                    </button>
+                </div>
             </div>
 
+            {/* Statistiques */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard title="Total trajets" value={stats.total} icon={Package} color="bg-blue-500" />
                 <StatCard title="En attente" value={stats.pending} icon={Clock} color="bg-yellow-500" />
@@ -146,7 +212,7 @@ export default function ClientDashboard() {
                                             </span>
                                             <span className="text-xs text-gray-400">#{trip.id?.toString().padStart(6, '0')}</span>
                                         </div>
-                                        <span className="text-sm font-bold text-green-600">{trip.prix?.toFixed(2)} €</span>
+                                        <span className="text-sm font-bold text-green-600">{formatCurrency(trip.prix)}</span>
                                     </div>
 
                                     <div className="space-y-2">
@@ -200,6 +266,14 @@ export default function ClientDashboard() {
                             Nouvelle demande →
                         </button>
                     </div>
+
+                    {/* Indicateur de mise à jour en temps réel */}
+                    {isRefreshing && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-sm text-yellow-700 flex items-center gap-2">
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Mise à jour des trajets en cours...
+                        </div>
+                    )}
                 </div>
             </div>
 
